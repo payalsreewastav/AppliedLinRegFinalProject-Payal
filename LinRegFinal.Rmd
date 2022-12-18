@@ -1,0 +1,365 @@
+---
+title: "Project"
+output: html_document
+---
+```{r}
+library(haven)
+library(ggplot2)
+library(dplyr)
+library(plm)
+library(stats)
+library(lmtest)
+library(sandwich)
+library(stargazer)
+```
+
+Loading in dataset
+```{r}
+data <- read_dta("Lin Reg replication/116115-V1/HARP_ROSCA_final.dta")
+```
+
+
+DATA DESCRIPTION 
+
+First, we need the dummy variables for the treatment mechanisms, dummy variable for whether they received multiple treatments, variable for their monthly ROSCA contribution, ROSCA id number, dummy variable for whether the respondent was encouraged to save, and sampling strata. In addition, I need the following control variables - dummy variable where 1 for female, dummy variable where 1 for female and married, variable for age, dummy variable where 1 for whether they are a provider or not, a dummy variable that indicates that they are patient now and impatient later, a dummy variable that indicates whether they are present biased, and lastly a variable for whether they have a maximal discount rate now and in the future. Lastly, we need the three health outcomes.  
+
+```{r}
+df <- data %>% 
+  select(id_harp_rosca, strata, safe_box, locked_box, health_pot, health_savings, multitreat, encouragement, rosbg_monthly_contrib, bg_female, bg_b1_age, bg_married, bg_hyperbolic, bg_pat_now_impat_later, bg_provider, bg_max_discount,bg_n_roscas,fol2_amtinvest_healthproducts, fol2_illness_untreated_3mo, fol2_reached_goal, bg_weekly_income) %>% 
+  mutate(bg_female_married=bg_female*bg_married)
+```
+
+Creating a data frame for plot
+```{r}
+
+plot_data <- df %>% 
+  select(safe_box, locked_box, health_pot, health_savings, multitreat, fol2_amtinvest_healthproducts, fol2_illness_untreated_3mo, fol2_reached_goal)
+
+attach(plot_data)
+plot_data$treatment[plot_data$safe_box == "1"] <- "Safe Box"
+plot_data$treatment[plot_data$locked_box == "1"] <- "Lock Box"
+plot_data$treatment[plot_data$health_savings == "1"] <- "HSA"
+plot_data$treatment[plot_data$health_pot == "1"] <- "Health Pot"
+plot_data$treatment[plot_data$multitreat == "1"] <- "Multitreat"
+detach(plot_data)
+
+plot_data<-plot_data %>%
+  mutate_at(c('treatment'), ~replace_na(.,"Control"))
+```
+
+Visualization illustrating the respondents' uptake of the treatment mechanisms
+```{r}
+plot1_df <- plot_data %>% 
+  group_by(treatment) %>% 
+  summarize(count = n())
+
+ggplot(plot1_df, aes(x=reorder(treatment, -count), y=count))+
+  geom_bar(stat = "identity", fill = "cornflowerblue", color="black")+
+  theme_classic()+
+  labs(x="Treatment Type", y="Number of Respondents", title="Overview of the Respondents' Uptake of Treatment", subtitle="A Replication Study of Dupas and Robinson's study - Why don't the poor save more?")
+
+```
+
+REPLICATION
+
+This project will replicate the results of table 3 in Dupas and Robinson's study. To do so, it will fit 2 linear regression models - 1 with only ROSCA controls and 1 with ROSCA and individual controls. Additionally, it will fit 4 linear probability regression models -  2 with only ROSCA controls and 2 with ROSCA and individual controls The linear probability regression models are for the health savings/outcomes: if an illness was not fully treated within the previous 3 months, and if household reached its health savings goal.
+
+Replicate column 1 of table 3
+```{r}
+col1 <- lm(fol2_amtinvest_healthproducts~ safe_box + locked_box + health_savings+health_pot+
+           multitreat + rosbg_monthly_contrib+factor(strata),data=df)
+col1mod <- coeftest(col1, vcov=vcovCL(x=col1, cluster=df$id_harp_rosca))
+
+col1mod
+```
+
+Replicate column 2 of table 3, column 1 + individual controls
+```{r}
+col2 <- lm(fol2_amtinvest_healthproducts ~ safe_box + locked_box + health_savings + health_pot+
+           multitreat + rosbg_monthly_contrib+ factor(strata)+ bg_b1_age+ bg_female+ bg_female_married + bg_provider + bg_hyperbolic + bg_pat_now_impat_later+ bg_max_discount+ bg_n_roscas, data=df)
+
+col2mod <- coeftest(col2, vcov=vcovCL(x=col2, cluster=df$id_harp_rosca))
+
+col2mod
+```
+
+Replicate column 3 of table 3
+```{r}
+col3 <- lm(fol2_illness_untreated_3mo ~ safe_box + locked_box + health_savings+health_pot+
+           multitreat + rosbg_monthly_contrib+factor(strata), data=df)
+
+col3mod <- coeftest(col3, vcov=vcovCL(x=col3, cluster=df$id_harp_rosca))
+
+col3mod
+```
+
+Replicate column 4 of table 3, column 2 + individual controls
+```{r}
+col4 <- lm(fol2_illness_untreated_3mo ~ safe_box + locked_box + health_savings + health_pot+
+           multitreat + rosbg_monthly_contrib+ factor(strata)+ bg_b1_age+ bg_female+ bg_female_married + bg_provider + bg_hyperbolic + bg_pat_now_impat_later+ bg_max_discount+ bg_n_roscas, data=df)
+
+col4mod <- coeftest(col4, vcov=vcovCL(x=col4, cluster=df$id_harp_rosca))
+
+col4mod
+```
+
+Replicate column 5 of table 3
+```{r}
+col5 <- lm(fol2_reached_goal ~ safe_box + locked_box + health_savings+health_pot+
+           multitreat + rosbg_monthly_contrib+factor(strata), data=df)
+
+col5mod <- coeftest(col5, vcov=vcovCL(x=col5, cluster=df$id_harp_rosca))
+
+col5mod
+```
+
+Replicate column 6 of table 3, column 5 + individual controls
+```{r}
+col6 <- lm(fol2_reached_goal ~ safe_box + locked_box + health_savings + health_pot+
+           multitreat + rosbg_monthly_contrib+ factor(strata)+ bg_b1_age+ bg_female+ bg_female_married + bg_provider + bg_hyperbolic + bg_pat_now_impat_later+ bg_max_discount+ bg_n_roscas, data=df)
+
+col6mod <- coeftest(col6, vcov=vcovCL(x=col6, cluster=df$id_harp_rosca))
+
+col6mod
+```
+
+EVALUATION
+
+
+Evaluation - section 1 
+
+This project aims to evaluate the unbiasedness of the coefficient estimates. It does so by running a simulation that bootstraps samples and fits the model being studied. The distribution of coefficients are then visualized using a histogram.  
+```{r}
+sim_size <- 2000
+
+sim_coeffs <- matrix(NA,
+                    ncol=4,
+                    nrow=sim_size)
+n <- nrow(df)
+
+for(i in 1:sim_size){
+  boot_ind <- sample(n, n, replace = TRUE)
+  
+  fol2_reached_goal_boot <- df$fol2_reached_goal[boot_ind]
+  safe_box_boot <- df$safe_box[boot_ind]
+  locked_box_boot <- df$locked_box[boot_ind]
+  health_pot_boot <- df$health_pot[boot_ind]
+  health_savings_boot <- df$health_savings[boot_ind]
+  rosbg_monthly_contrib_boot <- df$rosbg_monthly_contrib[boot_ind]
+  strata_boot <- df$strata[boot_ind]
+  multitreat_boot <- df$multitreat[boot_ind]
+  bg_b1_age_boot <- df$bg_b1_age[boot_ind]
+  bg_female_boot <- df$bg_female[boot_ind]
+  bg_female_married_boot <- df$bg_female_married[boot_ind]
+  bg_provider_boot <- df$bg_provider[boot_ind]
+  bg_hyperbolic_boot <- df$bg_hyperbolic[boot_ind]
+  bg_pat_now_impat_later_boot <- df$bg_pat_now_impat_later[boot_ind]
+  bg_max_discount_boot <- df$bg_max_discount[boot_ind]
+  bg_n_roscas_boot <- df$bg_n_roscas[boot_ind]
+
+  mod<-lm(fol2_reached_goal_boot ~ safe_box_boot + locked_box_boot + health_savings_boot + health_pot_boot+multitreat_boot + rosbg_monthly_contrib_boot+ factor(strata_boot)+ bg_b1_age_boot+bg_female_boot+bg_female_married_boot+bg_provider_boot+bg_hyperbolic_boot+bg_pat_now_impat_later_boot+bg_max_discount_boot+bg_n_roscas_boot)
+  
+  sim_coeffs[i,1] <- mod$coefficients[2]
+  sim_coeffs[i,2] <- mod$coefficients[3]
+  sim_coeffs[i,3] <- mod$coefficients[4]
+  sim_coeffs[i,4] <- mod$coefficients[5]
+}
+```
+
+
+```{r}
+safe_sim <- sim_coeffs[,1]
+lock_sim <- sim_coeffs[,2]
+hsa_sim <- sim_coeffs[,3]
+pot_sim <- sim_coeffs[,4]
+```
+
+
+```{r}
+hist(safe_sim, xlab="Simulations", ylab="Frequency", main="Distribution of Safe Box Treatment Coefficients", col="cornflowerblue", border="black")
+abline(v=mean(safe_sim), col="yellow", lwd=3)
+text(-0.05, 200, "Mean: 0.140")
+
+hist(lock_sim, xlab="Simulations", ylab="Frequency", main="Distribution of Locked Box Treatment Coefficients", col="cornflowerblue", border="black")
+abline(v=mean(lock_sim), col="yellow", lwd = 3)
+text(-0.25, 200, "Mean: -0.030")
+
+hist(hsa_sim, xlab="Simulations", ylab="Frequency", main="Distribution of Health Savings Account Treatment Coefficients", col="cornflowerblue", border="black")
+abline(v=mean(hsa_sim), col="yellow", lwd=3)
+text(-0.15, 200, "Mean: 0.040")
+
+hist(pot_sim, xlab="Simulations", ylab="Frequency", main="Distribution of ROSCA Health Pot Treatment Coefficients", col="cornflowerblue", border="black")
+abline(v=mean(pot_sim), col="yellow", lwd=3)
+text(-0.05, 200, "Mean: 0.135")
+```
+This evaluation section reveals that the coefficient estimates are unbaised as the average measured coefficient from the simulations is the exact same as the ones presented by Dupas and Robinson. 
+
+
+Evaluation - section 2 
+
+This project aims to understand the effectiveness of the individual controls as added features within this study. In order to do so, it conducts a simulation that bootstraps samples and creates 9 models, each with one lesser individual control feature. The models are then compared using AIC and BIC. 
+```{r}
+sim_num <- 1000
+best_mod <- matrix(NA, ncol = 4, nrow=sim_num)
+n <- nrow(df)
+
+for(i in 1:sim_num){
+  boot_ind <- sample(n, n, replace = TRUE)
+  
+  fol2_reached_goal_boot <- df$fol2_reached_goal[boot_ind]
+  safe_box_boot <- df$safe_box[boot_ind]
+  locked_box_boot <- df$locked_box[boot_ind]
+  health_pot_boot <- df$health_pot[boot_ind]
+  health_savings_boot <- df$health_savings[boot_ind]
+  rosbg_monthly_contrib_boot <- df$rosbg_monthly_contrib[boot_ind]
+  strata_boot <- df$strata[boot_ind]
+  multitreat_boot <- df$multitreat[boot_ind]
+  bg_b1_age_boot <- df$bg_b1_age[boot_ind]
+  bg_female_boot <- df$bg_female[boot_ind]
+  bg_female_married_boot <- df$bg_female_married[boot_ind]
+  bg_provider_boot <- df$bg_provider[boot_ind]
+  bg_hyperbolic_boot <- df$bg_hyperbolic[boot_ind]
+  bg_pat_now_impat_later_boot <- df$bg_pat_now_impat_later[boot_ind]
+  bg_max_discount_boot <- df$bg_max_discount[boot_ind]
+  bg_n_roscas_boot <- df$ bg_n_roscas[boot_ind]
+  
+
+  mod1=lm(fol2_reached_goal_boot ~ safe_box_boot + locked_box_boot + health_savings_boot + health_pot_boot+
+           multitreat_boot + rosbg_monthly_contrib_boot+ factor(strata_boot)+ bg_b1_age_boot+ bg_female_boot+ bg_female_married_boot + bg_provider_boot + bg_hyperbolic_boot + bg_pat_now_impat_later_boot+ bg_max_discount_boot+ bg_n_roscas_boot)
+
+  mod2=lm(fol2_reached_goal_boot ~ safe_box_boot + locked_box_boot + health_savings_boot + health_pot_boot+
+           multitreat_boot + rosbg_monthly_contrib_boot+ factor(strata_boot)+ bg_b1_age_boot+ bg_female_boot+ bg_female_married_boot + bg_provider_boot + bg_hyperbolic_boot + bg_pat_now_impat_later_boot+ bg_max_discount_boot)
+
+  mod3=lm(fol2_reached_goal_boot ~ safe_box_boot + locked_box_boot + health_savings_boot + health_pot_boot+
+           multitreat_boot + rosbg_monthly_contrib_boot+ factor(strata_boot)+ bg_b1_age_boot+ bg_female_boot+ bg_female_married_boot + bg_provider_boot + bg_hyperbolic_boot + bg_pat_now_impat_later_boot)
+
+  mod4=lm(fol2_reached_goal_boot ~ safe_box_boot + locked_box_boot + health_savings_boot + health_pot_boot+
+           multitreat_boot + rosbg_monthly_contrib_boot+ factor(strata_boot)+ bg_b1_age_boot+ bg_female_boot+ bg_female_married_boot + bg_provider_boot + bg_hyperbolic_boot)
+
+  mod5=lm(fol2_reached_goal_boot ~ safe_box_boot + locked_box_boot + health_savings_boot + health_pot_boot+
+           multitreat_boot + rosbg_monthly_contrib_boot+ factor(strata_boot)+ bg_b1_age_boot+ bg_female_boot+ bg_female_married_boot + bg_provider_boot)
+
+  mod6=lm(fol2_reached_goal_boot ~ safe_box_boot + locked_box_boot + health_savings_boot + health_pot_boot+
+           multitreat_boot + rosbg_monthly_contrib_boot+ factor(strata_boot)+ bg_b1_age_boot+ bg_female_boot+ bg_female_married_boot)
+
+  mod7=lm(fol2_reached_goal_boot ~ safe_box_boot + locked_box_boot + health_savings_boot + health_pot_boot+
+           multitreat_boot + rosbg_monthly_contrib_boot+ factor(strata_boot)+ bg_b1_age_boot+ bg_female_boot)
+
+  mod8=lm(fol2_reached_goal_boot ~ safe_box_boot + locked_box_boot + health_savings_boot + health_pot_boot+
+           multitreat_boot + rosbg_monthly_contrib_boot+ factor(strata_boot)+ bg_b1_age_boot)
+
+  mod9=lm(fol2_reached_goal_boot ~ safe_box_boot + locked_box_boot + health_savings_boot + health_pot_boot+
+           multitreat_boot + rosbg_monthly_contrib_boot+ factor(strata_boot))
+
+  AIC <- AIC(mod1, mod2, mod3, mod4, mod5, mod6, mod7, mod8, mod9)
+  best_mod[i,2] <- min(AIC[,2])
+  best_mod[i,1] <- rownames(AIC)[AIC[,2] == min(AIC[,2])]
+
+  BIC <- BIC(mod1, mod2, mod3, mod4, mod5, mod6, mod7, mod8, mod9)
+  best_mod[i,4] <- min(BIC[,2])
+  best_mod[i,3] <- rownames(BIC)[BIC[,2] == min(BIC[,2])]
+}
+
+# define a function to find the mode of a string column
+find_mode <- function(x) {
+  u <- unique(x)
+  tab <- tabulate(match(x, u))
+  u[tab == max(tab)]
+}
+
+AIC_best <- find_mode(best_mod[,1])
+BIC_best <- find_mode(best_mod[,3])
+
+dat <- data.frame(best_mod)
+
+subdat1 <- dat %>% 
+  filter(X1 == "mod8")
+AIC_mean <- mean(as.numeric(subdat1$X2))
+
+subdat2 <- dat %>% 
+  filter(X3 == "mod9")
+BIC_mean <- mean(as.numeric(subdat2$X4))
+
+cat("The best model according to AIC is:", AIC_best, "and the average AIC value is:", AIC_mean,", however, the best model according to BIC is:", BIC_best, "and the average BIC value is", BIC_mean)
+```
+
+
+
+This project proposes model 8, which only includes age as the individual control, as the most effective model. I make the choice of giving more important to the results of AIC as AIC reveals the minimized mean square error of predictions. The error is also indicative of overfitting, which is what we're attempting to minimize or avoid. The BIC, however, would just provide the true model for when the sample size approaches true population. Moreover, the average AIC value of model 8 is lower that the average BIC value of model 9. 
+
+```{r}
+true_model <- lm(fol2_reached_goal ~ safe_box + locked_box + health_savings + health_pot+ multitreat + rosbg_monthly_contrib + factor(strata)+ bg_b1_age, data=df)
+
+coeftest(true_model, vcov=vcovCL(x=true_model, cluster=df$id_harp_rosca))
+```
+
+
+Evaluation section 3 
+
+This project proposes an alternate model with weekly income prior to baseline survey as a variable. It hypothesizes that weekly income affects levels of savings, which would further affect whether or not the respondent reached their goal.
+```{r}
+alt_model <- lm(fol2_reached_goal ~ safe_box + locked_box + health_savings + health_pot+ multitreat + rosbg_monthly_contrib + factor(strata)+ bg_b1_age + bg_weekly_income+ bg_female+ bg_female_married + bg_provider + bg_hyperbolic + bg_pat_now_impat_later+ bg_max_discount+ bg_n_roscas, data=df)
+
+coeftest(alt_model, vcov=vcovCL(x=alt_model, cluster=df$id_harp_rosca))
+```
+
+```{r}
+AIC(col6, alt_model)
+BIC(col6, alt_model)
+```
+
+The AIC and BIC results above provide the information that the model with the added feature of weekly income is more effective and fits the data better. This points towards the idea that there exists some economic rationale behind weekly income affecting an individual's savings, their uptake of the 4 treatments as administered within the Dupas and Robinson study, and whether they reached their health goal.  
+
+
+
+EXPORTING TABLES 
+
+The stargazer code down below allows us to export tables detailing the models constructed in the replication section of this project. I've exported each model as a separate table and noted which column in Table 3 from Dupas and Robinson's study it corresponds with.
+
+Export Table 1 - Linear regression model with ROSCA controls only - column 1 of table 3
+```{r}
+stargazer(col1mod, type="html", 
+          dep.var.labels=c("Amount invested in Health Products"),
+          covariate.labels=c("Safe Box","Lock Box","Health Savings Account","Health Pot","Mutlitreat","ROSCA Monthly Contribution"),
+          out="col1.htm")
+```
+
+Export column 2 - Linear regression model with ROSCA controls and individual controls - column 2 of table 3
+```{r}
+stargazer(col2mod, type="html", 
+          dep.var.labels=c("Amount invested in Health Products"),
+          covariate.labels=c("Safe Box","Lock Box","Health Savings Account","Health Pot","Mutlitreat","ROSCA Monthly Contribution"),
+          out="col2.htm")
+```
+
+Export column 3 - Linear probability regression model with ROSCA controls only - column 3 of table 3
+```{r}
+stargazer(col3mod, type="html", 
+          dep.var.labels=c("If an illness was not fully treated within the previous 3 months"),
+          covariate.labels=c("Safe Box","Lock Box","Health Savings Account","Health Pot","Mutlitreat","ROSCA Monthly Contribution"),
+          out="col3.htm")
+```
+
+Export column 4 - Linear probability regression model with ROSCA controls and individual controls - column 4 of table 3
+```{r}
+stargazer(col4mod, type="html", 
+          dep.var.labels=c("If an illness was not fully treated within the previous 3 months"),
+          covariate.labels=c("Safe Box","Lock Box","Health Savings Account","Health Pot","Mutlitreat","ROSCA Monthly Contribution"),
+          out="col4.htm")
+```
+
+Export column 5 - Linear probability regression model with ROSCA controls only - column 5 of table 3
+```{r}
+stargazer(col5mod, type="html", 
+          dep.var.labels=c("If household reached its health savings goal"),
+          covariate.labels=c("Safe Box","Lock Box","Health Savings Account","Health Pot","Mutlitreat","ROSCA Monthly Contribution"),
+          out="col5.htm")
+```
+
+Export column 6 - Linear probability regression model with ROSCA controls and individual controls - column 6 of table 3
+```{r}
+stargazer(col6mod, type="html", 
+          dep.var.labels=c("If household reached its health savings goal"),
+          covariate.labels=c("Safe Box","Lock Box","Health Savings Account","Health Pot","Mutlitreat","ROSCA Monthly Contribution"),
+          out="col6.htm")
+```
